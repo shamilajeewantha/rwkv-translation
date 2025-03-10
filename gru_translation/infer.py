@@ -4,9 +4,9 @@ import torch
 import random
 from data_preprocessor import prepareData, tensorFromSentence
 
-def evaluate(encoder, decoder, sentence, input_lang, output_lang):
+def evaluate(encoder, decoder, sentence, input_lang, output_lang, device):
     with torch.no_grad():
-        input_tensor = tensorFromSentence(input_lang, sentence)
+        input_tensor = tensorFromSentence(input_lang, sentence, device)
 
         encoder_outputs, encoder_hidden = encoder(input_tensor)
         decoder_outputs, decoder_hidden, decoder_attn = decoder(encoder_outputs, encoder_hidden)
@@ -23,14 +23,14 @@ def evaluate(encoder, decoder, sentence, input_lang, output_lang):
     return decoded_words, decoder_attn
 
 
-def evaluateRandomly(encoder, decoder, n=10):
+def evaluateRandomly(encoder, decoder, device, n=10):
     correct_count = 0  # Initialize the counter for correct translations
 
     for i in range(n):
         pair = random.choice(pairs)
         print('>', pair[0])
         print('=', pair[1])
-        output_words, _ = evaluate(encoder, decoder, pair[0], input_lang, output_lang)
+        output_words, _ = evaluate(encoder, decoder, pair[0], input_lang, output_lang, device)
         output_sentence = ' '.join(output_words).replace('<EOS>', '').strip()
         print('<', output_sentence)
 
@@ -73,4 +73,4 @@ print("Models loaded successfully!")
 
 encoder_loaded.eval()
 decoder_loaded.eval()
-evaluateRandomly(encoder_loaded, decoder_loaded, 200)
+evaluateRandomly(encoder_loaded, decoder_loaded, device, 200)
