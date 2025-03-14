@@ -3,7 +3,7 @@ import re
 import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler
-from config import MAX_LENGTH, SOS_TOKEN, EOS_TOKEN
+from config import MAX_LENGTH, EOS_TOKEN, DATA_PATH
 
 class Lang:
     def __init__(self, name):
@@ -45,9 +45,12 @@ def normalizeString(s):
 def readLangs(lang1, lang2, reverse=False):
     print("Reading lines...")
 
+    # Construct the file path using DATA_PATH
+    file_path = DATA_PATH.format(lang1, lang2)
+
     # Read the file and split into lines
-    lines = open('data/%s-%s.txt' % (lang1, lang2), encoding='utf-8').\
-        read().strip().split('\n')
+    with open(file_path, encoding='utf-8') as f:
+        lines = f.read().strip().split('\n')
 
     # Split every line into pairs and normalize
     pairs = [[normalizeString(s) for s in l.split('\t')] for l in lines]

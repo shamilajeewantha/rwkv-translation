@@ -4,7 +4,7 @@ import torch
 import torch.optim as optim
 from utils import showPlot
 import torch.nn as nn
-from config import HIDDEN_SIZE, BATCH_SIZE, LEARNING_RATE
+from config import HIDDEN_SIZE, BATCH_SIZE, EPOCHS, LEARNING_RATE
 from model import EncoderRNN, AttnDecoderRNN
 from data_preprocessor import get_dataloader
 
@@ -138,7 +138,7 @@ decoder = AttnDecoderRNN(HIDDEN_SIZE, output_lang.n_words, device).to(device)
 print(encoder)
 print(decoder)
 
-train(train_dataloader, encoder, decoder, 100)
+train(train_dataloader, encoder, decoder, EPOCHS)
 print("Training completed successfully.")
 
 # Define file paths
