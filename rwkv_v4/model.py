@@ -101,6 +101,8 @@ class RWKVEncoder(nn.Module):
         cx = (e1 + e2) / 2  # Likewise, modify it to represent the cell state
 
         # Return rwkv as well it's used in the decoder to determine batch size.
+        print(f"RWKVEncoder: input_tokens shape: {input_tokens.shape}, rwkv shape: {rwkv.shape}, hx shape: {hx.shape}")
+
         return rwkv, hx
 
 

@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from config import MAX_LENGTH, SOS_TOKEN
+from config import MAX_LENGTH, SOS_TOKEN, BATCH_SIZE, HEAD_SIZE
 from rwkv_encoder import RWKV_Tmix_x060_state as RWKV_TimeMix
+from types import SimpleNamespace
 
 
 # ====================================================================
@@ -61,26 +62,16 @@ class RWKVEncoder(nn.Module):
         self.ctx_len = ctx_len
 
         # Optional embedding layer for input tokens
-        self.embedding = nn.Embedding(vocab_size, hidden_size)
+        self.embedding = nn.Embedding(vocab_size, 256)
 
-        # A config object (like GPTConfig) with minimal fields
-        class Config:
-            def __init__(self, n_embd, head_size_a, n_layer, ctx_len, model_type, vocab_size):
-                self.n_embd = n_embd
-                self.dim_att = n_embd
-                self.head_size_a = head_size_a
-                self.head_size_divisor = 8
-                self.n_layer = n_layer
-                self.ctx_len = ctx_len
-                self.model_type = model_type
-                self.vocab_size = vocab_size
-
-        config = Config(
-            n_embd=hidden_size,
-            head_size_a = 64,
-            n_layer=2,         # At least 2 layers to avoid ZeroDivisionError
+        config = SimpleNamespace(
+            n_embd=256,
+            dim_att=256,
+            head_size_a=HEAD_SIZE,
+            head_size_divisor=8,
+            n_layer=2,
             ctx_len=ctx_len,
-            model_type='RWKV', # Optional descriptor
+            model_type="RWKV",
             vocab_size=vocab_size
         )
 
@@ -96,10 +87,59 @@ class RWKVEncoder(nn.Module):
         x = self.embedding(input_tokens)  # => [B, T, hidden_size]
 
         # 2) Forward pass through RWKV_TimeMix
-        rwkv, hx = self.rwkv_layer(x)
+        print(f"RWKVEncoder: x.size(): {x.size()}")
 
-        # Return rwkv as well it's used in the decoder to determine batch size.
-        return rwkv, hx
+        rwkv, hx = self.rwkv_layer(x)
+        # print(f"RWKVEncoder: input_tokens shape: {input_tokens.shape}, rwkv shape: {rwkv.shape}, hx shape: {hx.shape}")
+
+        dim0, dim1, dim2 = hx.shape
+        # Reshape hx: group dim1 into (BATCH_SIZE, dim1//BATCH_SIZE)
+        hx_reshaped = hx.reshape(dim0, BATCH_SIZE, dim1 // BATCH_SIZE, dim2)  # integer division
+        # Pool (mean) over the newly created dim (dim=2)
+        hx_pooled = hx_reshaped.mean(dim=2)
+        # Optional: mean over dim0 (layers) and keep dims to get shape (1, BATCH_SIZE, dim2)
+        hx_pooled = hx_pooled.mean(dim=0, keepdim=True)
+
+        # For rwkv:
+        dim0, dim1, dim2 = rwkv.shape
+        # Reshape rwkv to group dim2 by self.hidden_size
+        rwkv_reshaped = rwkv.view(dim0, dim1, self.hidden_size, dim2 // self.hidden_size)
+        # Mean pool over last dimension to reduce size
+        rwkv_reduced = rwkv_reshaped.mean(dim=-1)
+
+        # print(f"RWKVEncoder: input_tokens shape: {input_tokens.shape}, rwkv shape: {rwkv_reduced.shape}, hx shape: {hx_pooled.shape}")
+        return rwkv_reduced, hx_pooled
+
+
+
+# import torch
+
+# hx = torch.tensor([
+#     [  # Layer 0
+#         [1.0, 2.0, 3.0],   # Batch 0
+#         [4.0, 5.0, 6.0],   # Batch 1
+#         [7.0, 8.0, 9.0],   # Batch 2
+#         [10.0, 11.0, 12.0] # Batch 3
+#     ],
+#     [  # Layer 1
+#         [2.0, 2.0, 4.0],
+#         [5.0, 6.0, 7.0],
+#         [8.0, 8.0, 10.0],
+#         [11.0, 11.0, 13.0]
+#     ]
+# ])  # shape: [2, 4, 3]
+
+# # Reshape to (2, 2, 2, 3) → group 4 batches into 2 groups of 2
+# hx_reshaped = hx.reshape(2, 2, 2, 3)
+
+# # Sum over the group-of-2-batches dimension (dim=2)
+# hx_summed = hx_reshaped.sum(dim=2)
+
+# print(hx_summed.shape)  # torch.Size([2, 2, 3])
+# print(hx_summed)
+
+
+
 
 
 # ====================================================================

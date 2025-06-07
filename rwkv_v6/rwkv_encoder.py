@@ -32,6 +32,7 @@ if os.environ["RWKV_JIT_ON"] == "1":
     MyModule = torch.jit.ScriptModule
     MyFunction = torch.jit.script_method
 
+from config import HEAD_SIZE
 
 ########################################################################################################
 # CUDA Kernel
@@ -39,7 +40,6 @@ if os.environ["RWKV_JIT_ON"] == "1":
 
 from torch.utils.cpp_extension import load
 
-HEAD_SIZE = 64
 
 
 # if 'x060' in os.environ["RWKV_MY_TESTING"]:
@@ -188,7 +188,7 @@ class RWKV_Tmix_x060_state(MyModule):
     def jit_func_2(self, x, g):
         B, T, C = x.size()
         x = x.view(B * T, C)
-        
+        x = x.to(self.ln_x.weight.dtype)
         x = self.ln_x(x).view(B, T, C)
         x = self.output(x * g)
         return x
@@ -198,7 +198,14 @@ class RWKV_Tmix_x060_state(MyModule):
         H = self.n_head
 
         r, k, v, g, w = self.jit_func(x)
-        x = RUN_CUDA_RWKV6_STATE(B, T, C, H, r, k, v, w, u=self.time_faaaa, s=self.time_state)
+
+        # Ensure inputs to CUDA kernel are in bfloat16
+        r = r.to(torch.bfloat16)
+        k = k.to(torch.bfloat16)
+        v = v.to(torch.bfloat16)
+        w = w.to(torch.bfloat16)
+    
+        x = RUN_CUDA_RWKV6_STATE(B, T, C, H, r, k, v, w, u=self.time_faaaa.to(torch.bfloat16), s=self.time_state.to(torch.bfloat16))
 
         return self.jit_func_2(x, g), self.time_state
 
