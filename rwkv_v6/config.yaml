@@ -8,3 +8,4 @@ SOS_TOKEN: 0
 EOS_TOKEN: 1
 DATA_PATH: "../data/{}-{}.txt"
 EPOCHS: 100
+RWKV_FLOAT_MODE: 'fp32'

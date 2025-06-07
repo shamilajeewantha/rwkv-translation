@@ -1,4 +1,4 @@
-from model import EncoderRNN, AttnDecoderRNN
+from model import EncoderRNN, AttnDecoderRNN, RWKVEncoder
 from config import HIDDEN_SIZE, EOS_TOKEN
 import torch
 import random
@@ -58,12 +58,17 @@ print(device)
 input_lang, output_lang, pairs = prepareData('eng', 'fra', True)
 
 # Initialize the models again before loading weights
-encoder_loaded = EncoderRNN(input_lang.n_words, HIDDEN_SIZE).to(device)
+# encoder_loaded = EncoderRNN(input_lang.n_words, HIDDEN_SIZE).to(device)
+encoder_loaded = RWKVEncoder(
+    vocab_size=input_lang.n_words,  # or however many tokens
+    hidden_size=HIDDEN_SIZE,         # for example
+    ctx_len=256                       # whatever max length you need
+).to(device)
 decoder_loaded = AttnDecoderRNN(HIDDEN_SIZE, output_lang.n_words, device).to(device)
 
 # Define file paths
-encoder_path = "encoder.pth"
-decoder_path = "decoder.pth"
+encoder_path = "rwkv_encoder.pth"
+decoder_path = "rwkv_decoder.pth"
 
 # Load saved state dictionaries
 encoder_loaded.load_state_dict(torch.load(encoder_path))

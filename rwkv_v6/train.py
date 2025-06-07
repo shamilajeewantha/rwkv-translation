@@ -5,7 +5,7 @@ import torch.optim as optim
 from utils import showPlot
 import torch.nn as nn
 from config import HIDDEN_SIZE, BATCH_SIZE, EPOCHS, LEARNING_RATE
-from model import EncoderRNN, AttnDecoderRNN
+from model import EncoderRNN, AttnDecoderRNN, RWKVEncoder
 from data_preprocessor import get_dataloader
 
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
@@ -132,7 +132,12 @@ print(device)
 
 input_lang, output_lang, train_dataloader = get_dataloader(BATCH_SIZE, device)
 
-encoder = EncoderRNN(input_lang.n_words, HIDDEN_SIZE).to(device)
+# encoder = EncoderRNN(input_lang.n_words, HIDDEN_SIZE).to(device)
+encoder = RWKVEncoder(
+    vocab_size=input_lang.n_words,  # or however many tokens
+    hidden_size=128,                # for example
+    ctx_len=256 ).to(device)               # whatever max length you need
+
 decoder = AttnDecoderRNN(HIDDEN_SIZE, output_lang.n_words, device).to(device)
 
 print(encoder)
@@ -143,8 +148,8 @@ print("Training completed successfully.")
 
 # Define file paths
 # TODO: Change the paths as needed
-encoder_path = "encoder.pth"
-decoder_path = "decoder.pth"
+encoder_path = "rwkv_encoder.pth"
+decoder_path = "rwkv_decoder.pth"
 
 # Save state dictionaries
 torch.save(encoder.state_dict(), encoder_path)

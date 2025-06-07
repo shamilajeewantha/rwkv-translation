@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from config import MAX_LENGTH, SOS_TOKEN
+from rwkv_encoder import RWKV_Tmix_x060_state as RWKV_TimeMix
 
 
 # ====================================================================
@@ -48,6 +49,57 @@ class EncoderRNN(nn.Module):
         output, hidden = self.gru(embedded)
         return output, hidden
     
+
+# ====================================================================
+# RWKV Encoder
+# ===================================================================
+
+class RWKVEncoder(nn.Module):
+    def __init__(self, vocab_size, hidden_size, ctx_len=1024):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.ctx_len = ctx_len
+
+        # Optional embedding layer for input tokens
+        self.embedding = nn.Embedding(vocab_size, hidden_size)
+
+        # A config object (like GPTConfig) with minimal fields
+        class Config:
+            def __init__(self, n_embd, head_size_a, n_layer, ctx_len, model_type, vocab_size):
+                self.n_embd = n_embd
+                self.dim_att = n_embd
+                self.head_size_a = head_size_a
+                self.head_size_divisor = 8
+                self.n_layer = n_layer
+                self.ctx_len = ctx_len
+                self.model_type = model_type
+                self.vocab_size = vocab_size
+
+        config = Config(
+            n_embd=hidden_size,
+            head_size_a = 64,
+            n_layer=2,         # At least 2 layers to avoid ZeroDivisionError
+            ctx_len=ctx_len,
+            model_type='RWKV', # Optional descriptor
+            vocab_size=vocab_size
+        )
+
+        # Create your RWKV_TimeMix layer
+        self.rwkv_layer = RWKV_TimeMix(config, layer_id=0)
+
+    def forward(self, input_tokens):
+        """
+        input_tokens: LongTensor [batch_size, seq_len]
+        Returns: rwkv, e1, e2
+        """
+        # 1) Embed
+        x = self.embedding(input_tokens)  # => [B, T, hidden_size]
+
+        # 2) Forward pass through RWKV_TimeMix
+        rwkv, hx = self.rwkv_layer(x)
+
+        # Return rwkv as well it's used in the decoder to determine batch size.
+        return rwkv, hx
 
 
 # ====================================================================
