@@ -25,7 +25,7 @@ except:
 def __nop(ob):
     return ob
 
-
+os.environ["RWKV_JIT_ON"] = "1"
 MyModule = nn.Module
 MyFunction = __nop
 if os.environ["RWKV_JIT_ON"] == "1":
@@ -39,13 +39,13 @@ if os.environ["RWKV_JIT_ON"] == "1":
 
 from torch.utils.cpp_extension import load
 
-HEAD_SIZE = int(os.environ["RWKV_HEAD_SIZE_A"])
+HEAD_SIZE = 64
 
 
 # if 'x060' in os.environ["RWKV_MY_TESTING"]:
 #     if os.environ["RWKV_TRAIN_TYPE"] == 'states':
 wkv6state_cuda = load(name="wkv6state", sources=["cuda/wkv6state_op.cpp", f"cuda/wkv6state_cuda.cu"],
-                verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}", f"-D_T_={int(os.environ['RWKV_CTXLEN'])}"])
+                verbose=True, extra_cuda_cflags=["-res-usage", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", f"-D_N_={HEAD_SIZE}", f"-D_T_={int(1024)}"])
     
 class WKV_6STATE(torch.autograd.Function):
     @staticmethod
