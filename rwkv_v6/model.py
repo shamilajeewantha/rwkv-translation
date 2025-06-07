@@ -78,37 +78,32 @@ class RWKVEncoder(nn.Module):
         # Create your RWKV_TimeMix layer
         self.rwkv_layer = RWKV_TimeMix(config, layer_id=0)
 
+
     def forward(self, input_tokens):
-        """
-        input_tokens: LongTensor [batch_size, seq_len]
-        Returns: rwkv, e1, e2
-        """
-        # 1) Embed
-        x = self.embedding(input_tokens)  # => [B, T, hidden_size]
+        x = self.embedding(input_tokens)  # x: [B, T, E]
+        rwkv, hx = self.rwkv_layer(x)     # rwkv: [B, T, 256], hx: [L=2, N=128, D=128]
 
-        # 2) Forward pass through RWKV_TimeMix
-        print(f"RWKVEncoder: x.size(): {x.size()}")
+        B = input_tokens.size(0)          # current batch size
+        T = input_tokens.size(1)          # sequence length
+        L, N, D = hx.shape                # num_layers, total_batches_seen, hidden_dim
 
-        rwkv, hx = self.rwkv_layer(x)
+        assert N >= B, f"RWKV returned fewer batches than current batch: {N} < {B}"
+
+        # Slice only current batch from hx, assuming hx stores across batches
+        hx = hx[:, :B, :]                 # [2, B, 128]
+        hx = hx.mean(dim=0, keepdim=True)  # mean across layers → [1, B, 128]
+
+        # Process rwkv: [B, T, 256] → [B, T, 128] using mean over last dim
+        rwkv_hidden = 128
+        assert rwkv.shape[-1] % rwkv_hidden == 0, \
+            f"Last dim of rwkv ({rwkv.shape[-1]}) must be divisible by {rwkv_hidden}"
+
+        factor = rwkv.shape[-1] // rwkv_hidden
+        rwkv = rwkv.view(B, T, rwkv_hidden, factor)  # [B, T, 128, 2]
+        rwkv = rwkv.mean(dim=-1)                     # [B, T, 128]
+
         # print(f"RWKVEncoder: input_tokens shape: {input_tokens.shape}, rwkv shape: {rwkv.shape}, hx shape: {hx.shape}")
-
-        dim0, dim1, dim2 = hx.shape
-        # Reshape hx: group dim1 into (BATCH_SIZE, dim1//BATCH_SIZE)
-        hx_reshaped = hx.reshape(dim0, BATCH_SIZE, dim1 // BATCH_SIZE, dim2)  # integer division
-        # Pool (mean) over the newly created dim (dim=2)
-        hx_pooled = hx_reshaped.mean(dim=2)
-        # Optional: mean over dim0 (layers) and keep dims to get shape (1, BATCH_SIZE, dim2)
-        hx_pooled = hx_pooled.mean(dim=0, keepdim=True)
-
-        # For rwkv:
-        dim0, dim1, dim2 = rwkv.shape
-        # Reshape rwkv to group dim2 by self.hidden_size
-        rwkv_reshaped = rwkv.view(dim0, dim1, self.hidden_size, dim2 // self.hidden_size)
-        # Mean pool over last dimension to reduce size
-        rwkv_reduced = rwkv_reshaped.mean(dim=-1)
-
-        # print(f"RWKVEncoder: input_tokens shape: {input_tokens.shape}, rwkv shape: {rwkv_reduced.shape}, hx shape: {hx_pooled.shape}")
-        return rwkv_reduced, hx_pooled
+        return rwkv, hx
 
 
 
