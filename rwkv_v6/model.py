@@ -85,15 +85,15 @@ class RWKVEncoder(nn.Module):
         self.hx_proj = nn.Linear(2 * 128, 128)
 
     def forward(self, input_tokens):
-        x = self.embedding(input_tokens)  # [B, T, 256]
-        rwkv, hx = self.rwkv_layer(x)     # rwkv: [B, T, 256], hx: [2, N, 128]
+        x = self.embedding(input_tokens) 
+        rwkv, hx = self.rwkv_layer(x)     
 
         B = input_tokens.size(0)
         T = input_tokens.size(1)
         L, N, D = hx.shape
 
         assert N >= B, f"RWKV returned fewer batches than current batch: {N} < {B}"
-
+        print(f'RWKV shape :{rwkv.shape}, hx shape: {hx.shape}')
         return rwkv, hx
 
 
