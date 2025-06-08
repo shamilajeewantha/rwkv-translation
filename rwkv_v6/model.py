@@ -81,9 +81,6 @@ class RWKVEncoder(nn.Module):
         # RWKV layer
         self.rwkv_layer = RWKV_TimeMix(config, layer_id=0)
 
-        # Linear projection: hx [2, B, 128] → [B, 128]
-        self.hx_proj = nn.Linear(2 * 128, 128)
-
     def forward(self, input_tokens):
         x = self.embedding(input_tokens) 
         rwkv, hx = self.rwkv_layer(x)     
