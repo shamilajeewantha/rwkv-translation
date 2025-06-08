@@ -54,6 +54,9 @@ class EncoderRNN(nn.Module):
 # ====================================================================
 # RWKV Encoder
 # ===================================================================
+import torch
+import torch.nn as nn
+from types import SimpleNamespace
 
 class RWKVEncoder(nn.Module):
     def __init__(self, vocab_size, hidden_size, ctx_len=1024):
@@ -67,7 +70,7 @@ class RWKVEncoder(nn.Module):
         config = SimpleNamespace(
             n_embd=256,
             dim_att=256,
-            head_size_a=HEAD_SIZE,
+            head_size_a=HEAD_SIZE,  # make sure HEAD_SIZE is defined elsewhere
             head_size_divisor=8,
             n_layer=2,
             ctx_len=ctx_len,
@@ -75,36 +78,35 @@ class RWKVEncoder(nn.Module):
             vocab_size=vocab_size
         )
 
-        # Create your RWKV_TimeMix layer
+        # RWKV layer
         self.rwkv_layer = RWKV_TimeMix(config, layer_id=0)
 
+        # Linear projection: rwkv [B, T, 256] → [B, T, 128]
+        self.rwkv_proj = nn.Linear(256, 128)
+
+        # Linear projection: hx [2, B, 128] → [B, 128]
+        self.hx_proj = nn.Linear(2 * 128, 128)
 
     def forward(self, input_tokens):
-        x = self.embedding(input_tokens)  # x: [B, T, E]
-        rwkv, hx = self.rwkv_layer(x)     # rwkv: [B, T, 256], hx: [L=2, N=128, D=128]
+        x = self.embedding(input_tokens)  # [B, T, 256]
+        rwkv, hx = self.rwkv_layer(x)     # rwkv: [B, T, 256], hx: [2, N, 128]
 
-        B = input_tokens.size(0)          # current batch size
-        T = input_tokens.size(1)          # sequence length
-        L, N, D = hx.shape                # num_layers, total_batches_seen, hidden_dim
+        B = input_tokens.size(0)
+        T = input_tokens.size(1)
+        L, N, D = hx.shape
 
         assert N >= B, f"RWKV returned fewer batches than current batch: {N} < {B}"
 
-        # Slice only current batch from hx, assuming hx stores across batches
+        # Get current batch only from hx: [2, B, 128]
         hx = hx[:, :B, :]                 # [2, B, 128]
-        hx = hx.mean(dim=0, keepdim=True)  # mean across layers → [1, B, 128]
+        hx = hx.permute(1, 0, 2).reshape(B, L * D)  # [B, 256]
+        hx = self.hx_proj(hx)                             # [B, 128]
+        hx = hx.unsqueeze(0)                              # [1, B, 128]
 
-        # Process rwkv: [B, T, 256] → [B, T, 128] using mean over last dim
-        rwkv_hidden = 128
-        assert rwkv.shape[-1] % rwkv_hidden == 0, \
-            f"Last dim of rwkv ({rwkv.shape[-1]}) must be divisible by {rwkv_hidden}"
+        # Project rwkv from 256 → 128
+        rwkv = self.rwkv_proj(rwkv)       # [B, T, 128]
 
-        factor = rwkv.shape[-1] // rwkv_hidden
-        rwkv = rwkv.view(B, T, rwkv_hidden, factor)  # [B, T, 128, 2]
-        rwkv = rwkv.mean(dim=-1)                     # [B, T, 128]
-
-        # print(f"RWKVEncoder: input_tokens shape: {input_tokens.shape}, rwkv shape: {rwkv.shape}, hx shape: {hx.shape}")
         return rwkv, hx
-
 
 
 # import torch
