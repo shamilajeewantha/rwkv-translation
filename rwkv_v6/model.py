@@ -65,11 +65,11 @@ class RWKVEncoder(nn.Module):
         self.ctx_len = ctx_len
 
         # Optional embedding layer for input tokens
-        self.embedding = nn.Embedding(vocab_size, 256)
+        self.embedding = nn.Embedding(vocab_size, hidden_size)
 
         config = SimpleNamespace(
-            n_embd=256,
-            dim_att=256,
+            n_embd=hidden_size,
+            dim_att=hidden_size,
             head_size_a=HEAD_SIZE,  # make sure HEAD_SIZE is defined elsewhere
             head_size_divisor=8,
             n_layer=2,
@@ -80,9 +80,6 @@ class RWKVEncoder(nn.Module):
 
         # RWKV layer
         self.rwkv_layer = RWKV_TimeMix(config, layer_id=0)
-
-        # Linear projection: rwkv [B, T, 256] → [B, T, 128]
-        self.rwkv_proj = nn.Linear(256, 128)
 
         # Linear projection: hx [2, B, 128] → [B, 128]
         self.hx_proj = nn.Linear(2 * 128, 128)
@@ -96,15 +93,6 @@ class RWKVEncoder(nn.Module):
         L, N, D = hx.shape
 
         assert N >= B, f"RWKV returned fewer batches than current batch: {N} < {B}"
-
-        # Get current batch only from hx: [2, B, 128]
-        hx = hx[:, :B, :]                 # [2, B, 128]
-        hx = hx.permute(1, 0, 2).reshape(B, L * D)  # [B, 256]
-        hx = self.hx_proj(hx)                             # [B, 128]
-        hx = hx.unsqueeze(0)                              # [1, B, 128]
-
-        # Project rwkv from 256 → 128
-        rwkv = self.rwkv_proj(rwkv)       # [B, T, 128]
 
         return rwkv, hx
 
